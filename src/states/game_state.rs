@@ -3,8 +3,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-
-use crate::wikipedia::{get_pretty_extract, get_random_article_extract};
+use crate::text::wikipedia::{get_pretty_extract, get_random_article_extract};
 
 #[derive(Serialize, Debug, Clone)]
 pub struct Game {
@@ -114,11 +113,9 @@ impl GameStore {
         if user_text.text.len() < game.text.len() {
             user_text.text.push(character);
 
-            if *correct_text_length == user_text.text.len() - 1 {
-                if character == game.text.chars().nth(user_text.text.len() - 1).unwrap() {
-                    *correct_text_length += 1;
-                    return Some(*correct_text_length);
-                } 
+            if *correct_text_length == user_text.text.len() - 1 && character == game.text.chars().nth(user_text.text.len() - 1).unwrap() {
+                *correct_text_length += 1;
+                return Some(*correct_text_length);
             } 
         } 
         

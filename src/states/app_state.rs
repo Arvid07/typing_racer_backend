@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::game_state::GameStore;
-use crate::user_state::UserStore;
+use crate::states::game_state::GameStore;
+use crate::states::user_state::UserStore;
 
 #[derive(Default)]
 pub struct AppState {
