@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -24,6 +25,11 @@ impl UserStore {
     pub async fn get_user(&self, user_id: &String) -> Option<User> {
         let binding = self.users.read().await;
         binding.get(user_id).cloned()
+    }
+    
+    pub async fn get_all_users(&self) -> HashMap<String, String> {
+        let binding = self.users.read().await;
+        binding.iter().map(|(user_id, user)| (user_id.clone(), user.name.clone())).collect()
     }
     
     pub async fn remove_user(&self, user_id: &String) -> Option<User> {
