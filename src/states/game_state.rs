@@ -1,16 +1,22 @@
 use std::cmp::min;
-use std::collections::HashMap;
-
+use std::collections::{HashMap};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 use tokio::sync::RwLock;
+use tracing::info;
 use crate::text::wikipedia::{get_pretty_extract, get_random_article_extract};
+use crate::util::user_color::UserColor;
 
 #[derive(Serialize, Debug, Clone)]
 pub struct Game {
     pub text: String,
     pub user_text: HashMap<String, UserText>,
     pub correct_text_length: HashMap<String, usize>,
-    pub app_state: AppState
+    pub user_color: HashMap<String, UserColor>,
+    pub app_state: AppState,
+    pub available_colors: Vec<UserColor>
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -33,7 +39,7 @@ pub struct GameStore {
     pub games: RwLock<RoomStore>
 }
 
-const TEXT_SIZE: usize = 5;
+const TEXT_SIZE: usize = 10;
 
 impl GameStore {
     pub async fn init_game(&self, room: String) {
@@ -42,9 +48,10 @@ impl GameStore {
         if binding.contains_key(&room) {
             return;
         }
-        
+
         // let mut extract = String::new();
-        let mut extract = String::from("This is an example text!".repeat(1));
+        // let mut extract = "Murad Subay (born July 3, 1987, in Dhamar) is a Yemeni contemporary artist, street artist and a political activist. He has launched several street art campaigns of which society engagement marked one of their important elements. He first started to paint on the streets after the revolution of 2011, in a campaign he called \"Color the Walls of Your Street\".".to_string();
+        let mut extract = String::from("This is an example text!");
 
         while extract.chars().count() < TEXT_SIZE {
             let wikipedia_response = get_random_article_extract().await.unwrap();
@@ -56,17 +63,24 @@ impl GameStore {
                     break;
                 }
             }
-
-            extract = get_pretty_extract(wikipedia_response.value[..length].parse().unwrap());
+            
+            if let Some(pretty_extract) = get_pretty_extract(wikipedia_response.value[..length].parse().unwrap()) {
+                extract = pretty_extract;
+            } else {
+                info!("extract does contain non ascii letters!");
+            }
         }
         
-        // TODO: remove non english symbols with deepl api
+        let mut available_colors: Vec<UserColor> = UserColor::iter().collect();
+        available_colors.shuffle(&mut thread_rng());
         
         let game = Game {
             text: extract,
             correct_text_length: HashMap::new(),
             user_text: HashMap::new(),
-            app_state: AppState::LOBBY
+            user_color: HashMap::new(),
+            app_state: AppState::LOBBY,
+            available_colors
         };
 
         binding.insert(room, game);
@@ -77,7 +91,15 @@ impl GameStore {
         
         if let Some(game) = binding.get_mut(room) {
             game.user_text.insert(user_id.clone(), UserText { user_name, text: String::new() });
-            game.correct_text_length.insert(user_id, 0);
+            game.correct_text_length.insert(user_id.clone(), 0);
+            
+            if game.available_colors.is_empty() {
+                let mut available_colors: Vec<UserColor> = UserColor::iter().collect();
+                available_colors.shuffle(&mut thread_rng());
+                game.available_colors = available_colors;
+            }
+            
+            game.user_color.insert(user_id, game.available_colors.pop().unwrap());
         } else { 
             panic!()
         }
@@ -89,6 +111,9 @@ impl GameStore {
         if let Some(game) = binding.get_mut(room) {
             game.user_text.remove(user_id);
             game.correct_text_length.remove(user_id);
+            let color = game.user_color.remove(user_id).unwrap();
+            game.available_colors.push(color);
+            
             if game.user_text.is_empty() {
                 binding.remove(room);
                 return true;
@@ -214,7 +239,12 @@ impl GameStore {
 
     pub async fn get_all_users(&self, room: &String, user_map: &HashMap<String, String>) -> HashMap<String, String> {
         let binding = self.games.read().await;
-        binding.get(room).unwrap().user_text.iter().map(|(user_id, _)| (user_id.clone(), user_map.get(user_id).unwrap().clone())).collect()
+        binding.get(room).unwrap().user_text.keys().map(|user_id| (user_id.clone(), user_map.get(user_id).unwrap().clone())).collect()
+    }
+    
+    pub async fn get_all_user_color(&self, room: &String) -> HashMap<String, UserColor> {
+        let binding = self.games.read().await;
+        binding.get(room).unwrap().user_color.clone()
     }
     
     pub async fn get_app_state(&self, room: &String) -> AppState {

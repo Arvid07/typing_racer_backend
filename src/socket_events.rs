@@ -5,6 +5,7 @@ use tracing::{info};
 use crate::states::app_state::SharedAppState;
 use crate::states::game_state::AppState;
 use crate::states::user_state::User;
+use crate::util::user_color::UserColor;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Character {
@@ -16,7 +17,8 @@ struct Character {
 struct UserConnectData {
     user_map: HashMap<String, String>,
     correct_text_length_map: HashMap<String, usize>,
-    app_state: AppState
+    app_state: AppState,
+    color: HashMap<String, UserColor>
 }
 
 #[derive(Serialize)]
@@ -48,7 +50,8 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
         let data = UserConnectData {
             user_map: state.games.get_all_users(&user.room, &state.users.get_all_users().await).await,
             correct_text_length_map: state.games.get_correct_text_length_all(&user.room).await,
-            app_state: state.games.get_app_state(&user.room).await
+            app_state: state.games.get_app_state(&user.room).await,
+            color: state.games.get_all_user_color(&user.room).await
         };
 
         if data.app_state == AppState::GAME {
@@ -70,7 +73,8 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
                 let data = UserConnectData {
                     user_map: state.games.get_all_users(&user.room, &state.users.get_all_users().await).await,
                     correct_text_length_map: state.games.get_correct_text_length_all(&user.room).await,
-                    app_state: state.games.get_app_state(&user.room).await
+                    app_state: state.games.get_app_state(&user.room).await,
+                    color: state.games.get_all_user_color(&user.room).await
                 };
 
                 let _ = socket.within(user.room.clone()).emit("user_connect", data);
@@ -116,6 +120,7 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
         if let Some(text_index) = state.games.pop_character(&user.room, &user_id).await {
             let user_text_change = UserTextChangeOut { user_id, text_index };
             let _ = socket.within(user.room.clone()).emit("character_change", user_text_change);
+            info!("emitted character_change");
         }
     });
 

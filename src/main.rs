@@ -1,13 +1,14 @@
+pub mod states;
+pub mod text;
+mod socket_events;
+mod util;
+
 use socketioxide::SocketIo;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::FmtSubscriber;
 use crate::states::app_state::SharedAppState;
-
-pub mod states;
-pub mod text;
-mod socket_events;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting Server");
 
-    axum::Server::bind(&"127.0.0.1:3001".parse().unwrap())
+    axum::Server::bind(&"0.0.0.0:3001".parse().unwrap())
         .serve(app.into_make_service())
         .await?;
 
