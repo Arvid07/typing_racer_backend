@@ -27,6 +27,11 @@ impl UserStore {
         binding.get(user_id).cloned()
     }
     
+    pub async fn contains_user(&self, user_id: &String) -> bool {
+        let binding = self.users.read().await;
+        binding.contains_key(user_id)
+    }
+    
     pub async fn get_all_users(&self) -> HashMap<String, String> {
         let binding = self.users.read().await;
         binding.iter().map(|(user_id, user)| (user_id.clone(), user.name.clone())).collect()
