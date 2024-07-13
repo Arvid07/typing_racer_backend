@@ -39,7 +39,7 @@ pub struct GameStore {
     pub games: RwLock<RoomStore>
 }
 
-const TEXT_SIZE: usize = 1;
+const TEXT_SIZE: usize = 250;
 
 impl GameStore {
     pub async fn init_game(&self, room: String) -> bool {
@@ -66,8 +66,7 @@ impl GameStore {
     }
     
     pub async fn generate_text(&self, room: &String) {
-        // let mut extract = String::new();
-        let mut extract = "aaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let mut extract = String::new();
 
         while extract.chars().count() < TEXT_SIZE {
             let wikipedia_response = get_random_article_extract().await.unwrap();
