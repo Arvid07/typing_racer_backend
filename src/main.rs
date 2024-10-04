@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting Server");
 
-    axum::Server::bind(&"0.0.0.0:3001".parse().unwrap())
+    axum_server::Server::bind("0.0.0.0:3001".parse().unwrap())
         .serve(app.into_make_service())
         .await?;
 

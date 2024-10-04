@@ -1,29 +1,33 @@
 use std::cmp::min;
-use std::collections::{HashMap};
+use std::collections::HashMap;
+
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use tokio::sync::RwLock;
-use tracing::info;
-use crate::text::wikipedia::{get_pretty_extract, get_random_article_extract};
+
 use crate::util::user_color::UserColor;
 
 #[derive(Serialize, Debug, Clone)]
 pub struct Game {
     pub text: String,
+    pub started_generating_text: bool,
+    pub finished_generating_text: bool,
     pub user_text: HashMap<String, UserText>,
     pub correct_text_length: HashMap<String, usize>,
     pub user_color: HashMap<String, UserColor>,
     pub game_state: GameState,
-    pub available_colors: Vec<UserColor>
+    pub available_colors: Vec<UserColor>,
+    pub followup_game_id: String
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub enum GameState {
-    LOBBY,
-    GAME,
-    ENDING
+    Lobby,
+    GameCountdown,
+    Game,
+    Ending
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -39,7 +43,7 @@ pub struct GameStore {
     pub games: RwLock<RoomStore>
 }
 
-const TEXT_SIZE: usize = 250;
+pub const TEXT_SIZE: usize = 250;
 
 impl GameStore {
     pub async fn init_game(&self, room: String) -> bool {
@@ -54,49 +58,56 @@ impl GameStore {
 
         let game = Game {
             text: String::new(),
+            started_generating_text: false,
+            finished_generating_text: false,
             correct_text_length: HashMap::new(),
             user_text: HashMap::new(),
             user_color: HashMap::new(),
-            game_state: GameState::LOBBY,
-            available_colors
+            game_state: GameState::Lobby,
+            available_colors,
+            followup_game_id: String::new()
         };
 
         binding.insert(room, game);
         true
     }
     
-    pub async fn generate_text(&self, room: &String) {
-        let mut extract = String::new();
-
-        while extract.chars().count() < TEXT_SIZE {
-            let wikipedia_response = get_random_article_extract().await.unwrap();
-            let mut length = wikipedia_response.value.chars().count();
-
-            for i in TEXT_SIZE..wikipedia_response.value.chars().count() {
-                if wikipedia_response.value.chars().nth(i).unwrap() == '.' {
-                    length = i + 1;
-                    break;
-                }
-            }
-
-            if let Some(pretty_extract) = get_pretty_extract(wikipedia_response.value[..length].parse().unwrap()) {
-                extract = pretty_extract;
-            } else {
-                info!("extract does contain non ascii letters!");
-            }
-        }
-
+    pub async fn set_start_generating_text(&self, room: &String) {
         let mut binding = self.games.write().await;
-        binding.get_mut(room).unwrap().text = extract;
+        binding.get_mut(room).unwrap().started_generating_text = true;
+    }
+    
+    pub async fn set_game_text(&self, room: &String, text: String) {
+        let mut binding = self.games.write().await;
+        let game = binding.get_mut(room).unwrap();
+        game.finished_generating_text = true;
+        game.text = text;
     }
     
     pub async fn is_available(&self, room: &String) -> bool {
         let binding = self.games.read().await;
-        
         if let Some(game) = binding.get(room) {
-            return game.game_state != GameState::ENDING;
+            return game.game_state != GameState::Ending;
         }
         
+        false
+    }
+    
+    pub async fn started_generating_text(&self, room: &String) -> bool {
+        let binding = self.games.read().await;
+        if let Some(game) = binding.get(room) {
+            return game.started_generating_text;
+        }
+
+        false
+    }
+
+    pub async fn finished_generating_text(&self, room: &String) -> bool {
+        let binding = self.games.read().await;
+        if let Some(game) = binding.get(room) {
+            return game.finished_generating_text;
+        }
+
         false
     }
 
@@ -268,7 +279,12 @@ impl GameStore {
 
     pub async fn start_game(&self, room: &String) {
         let mut binding = self.games.write().await;
-        binding.get_mut(room).unwrap().game_state = GameState::GAME;
+        binding.get_mut(room).unwrap().game_state = GameState::Game;
+    }
+    
+    pub async fn start_game_countdown(&self, room: &String) {
+        let mut binding = self.games.write().await;
+        binding.get_mut(room).unwrap().game_state = GameState::GameCountdown;
     }
 
     pub async fn check_ending(&self, room: &String, user_id: &String) -> bool {
@@ -277,10 +293,20 @@ impl GameStore {
         let user_text_index = binding.get(room).unwrap().correct_text_length.get(user_id).unwrap();
 
         if user_text_index >= &game_text_length {
-            binding.get_mut(room).unwrap().game_state = GameState::ENDING;
+            binding.get_mut(room).unwrap().game_state = GameState::Ending;
             return true;
         }
         
         false
+    }
+    
+    pub async fn set_followup_game_id(&self, room: &String, game_id: String) {
+        let mut binding = self.games.write().await;
+        binding.get_mut(room).unwrap().followup_game_id = game_id;
+    }
+
+    pub async fn get_followup_game_id(&self, room: &String) -> String {
+        let binding = self.games.read().await;
+        binding.get(room).unwrap().followup_game_id.clone()
     }
 }
