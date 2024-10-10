@@ -17,16 +17,11 @@ struct Query {
 
 #[derive(Deserialize, Debug)]
 struct Page {
-    pageid: u32,
-    ns: u32,
-    title: String,
     extract: String,
 }
 
 #[derive(Deserialize, Debug)]
 struct Random {
-    id: u32,
-    ns: u32,
     title: String
 }
 

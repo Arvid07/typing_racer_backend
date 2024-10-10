@@ -9,7 +9,7 @@ use tracing::{info};
 use uuid::Uuid;
 use crate::states::app_state::{AppState, SharedAppState};
 use crate::states::game_state::{GameState, TEXT_SIZE};
-use crate::states::user_state::User;
+use crate::states::user_state::UserInfo;
 use crate::text::wikipedia::{get_pretty_extract, get_random_article_extract};
 use crate::util::user_color::UserColor;
 
@@ -34,7 +34,7 @@ struct UserTextChangeOut {
     text_index: usize
 }
 
-async fn user_join<'a>(socket: &SocketRef, user: &User, state: &MutexGuard<'a, AppState>) -> bool {
+async fn user_join<'a>(socket: &SocketRef, user: &UserInfo, state: &MutexGuard<'a, AppState>) -> bool {
     state.users.add_user(socket.id.to_string(), user.clone()).await;
     
     let _ = socket.leave_all();
@@ -67,7 +67,7 @@ async fn user_leave<'a>(socket: &SocketRef, state: &MutexGuard<'a, AppState>) {
     }
 }
 
-async fn create_game<'a>(socket: &SocketRef, state: &MutexGuard<'a, AppState>, game_id: String, user: &mut User) {
+async fn create_game<'a>(socket: &SocketRef, state: &MutexGuard<'a, AppState>, game_id: String, user: &mut UserInfo) {
     user.room.clone_from(&game_id);
     let room = user.room.clone();
 
@@ -79,8 +79,8 @@ async fn create_game<'a>(socket: &SocketRef, state: &MutexGuard<'a, AppState>, g
 
 async fn get_game_data<'a>(room: &String, state: &MutexGuard<'a, AppState>) -> UserConnectData {
     UserConnectData {
-        user_map: state.games.get_all_users(room, &state.users.get_all_users().await).await,
-        correct_text_length_map: state.games.get_correct_text_length_all(room).await,
+        user_map: state.games.get_all_users(room).await,
+        correct_text_length_map: state.games.get_correct_len_all(room).await,
         app_state: state.games.get_game_state(room).await,
         color: state.games.get_all_user_color(room).await,
         finished_generating_text: state.games.finished_generating_text(room).await
@@ -90,7 +90,7 @@ async fn get_game_data<'a>(room: &String, state: &MutexGuard<'a, AppState>) -> U
 pub async fn handle_websocket_connection(socket: SocketRef) {
     info!("Socket connected: {}", socket.id);
 
-    socket.on("join_game", |socket: SocketRef, Data::<User>(user), state: State<SharedAppState>| async move {
+    socket.on("join_game", |socket: SocketRef, Data::<UserInfo>(user), state: State<SharedAppState>| async move {
         if user.name.is_empty() {
             return;
         }
@@ -107,7 +107,7 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
         let _ = socket.emit("allowed_to_join", "");
     });
 
-    socket.on("create_game", |socket: SocketRef, Data::<User>(mut user), state: State<SharedAppState>| async move {
+    socket.on("create_game", |socket: SocketRef, Data::<UserInfo>(mut user), state: State<SharedAppState>| async move {
         if user.name.is_empty() {
             return;
         }
@@ -121,7 +121,7 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
         create_game(&socket, &state, game_id, &mut user).await;
     });
     
-    socket.on("play_again", |socket: SocketRef, Data::<User>(mut user), state: State<SharedAppState>| async move {
+    socket.on("play_again", |socket: SocketRef, Data::<UserInfo>(mut user), state: State<SharedAppState>| async move {
         info!("Received play_again");
         let state = state.lock().await;
         let room = user.room.clone();
@@ -132,7 +132,7 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
         
         let mut game_id = state.games.get_followup_game_id(&room).await;
         
-        if !game_id.is_empty() {
+        if state.games.is_available(&game_id).await {
             let _ = socket.emit("game_id", game_id.clone());
             user.room = game_id;
 
@@ -147,7 +147,7 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
         }
     });
     
-    socket.on("generate_game_text", |socket: SocketRef, Data::<User>(user), state: State<SharedAppState>| async move {
+    socket.on("generate_game_text", |socket: SocketRef, Data::<UserInfo>(user), state: State<SharedAppState>| async move {
         let state_guard = state.lock().await;
         let room = user.room;
 
@@ -192,7 +192,7 @@ pub async fn handle_websocket_connection(socket: SocketRef) {
         user_leave(&socket, &state).await;
     });
 
-    socket.on("start_game", |socket: SocketRef, Data::<User>(user), state: State<SharedAppState>| async move {        
+    socket.on("start_game", |socket: SocketRef, Data::<UserInfo>(user), state: State<SharedAppState>| async move {        
         info!("The game in the room {} was started!", user.room);
 
         let state_guard = state.lock().await;

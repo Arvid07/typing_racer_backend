@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
+pub struct UserInfo {
     pub name: String,
     pub room: String
 }
 
-pub type RoomStore = HashMap<String, User>;
+pub type RoomStore = HashMap<String, UserInfo>;
 
 #[derive(Default)]
 pub struct UserStore {
@@ -17,12 +17,12 @@ pub struct UserStore {
 }
 
 impl UserStore {
-    pub async fn add_user(&self, user_id: String, user: User) {
+    pub async fn add_user(&self, user_id: String, user: UserInfo) {
         let mut binding = self.users.write().await;
         binding.insert(user_id, user);
     } 
     
-    pub async fn get_user(&self, user_id: &String) -> Option<User> {
+    pub async fn get_user(&self, user_id: &String) -> Option<UserInfo> {
         let binding = self.users.read().await;
         binding.get(user_id).cloned()
     }
@@ -37,7 +37,7 @@ impl UserStore {
         binding.iter().map(|(user_id, user)| (user_id.clone(), user.name.clone())).collect()
     }
     
-    pub async fn remove_user(&self, user_id: &String) -> Option<User> {
+    pub async fn remove_user(&self, user_id: &String) -> Option<UserInfo> {
         let mut binding = self.users.write().await;
         binding.remove(user_id)
     }
